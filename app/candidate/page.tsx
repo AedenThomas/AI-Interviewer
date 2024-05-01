@@ -18,12 +18,6 @@ const genAI = new GoogleGenerativeAI(API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
 
-// export default function Interview() {
-//     const router = useRouter()
-//     const { id } = router.query
-
-//     return <p>Interview ID: {id}</p>
-//   }
 
 
 export default function InterviewScreen() {

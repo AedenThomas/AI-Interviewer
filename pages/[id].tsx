@@ -10,6 +10,22 @@ import useFirestore from '@/hooks/useFirestore';
 import * as sdk from "microsoft-cognitiveservices-speech-sdk";
 import { AudioConfig, ResultReason, SpeechConfig, SpeechRecognizer } from "microsoft-cognitiveservices-speech-sdk";
 import { CohereClient } from "cohere-ai";
+import Webcam from 'react-webcam';
+import 'firebase/storage';
+import * as firebase from 'firebase/app';
+import { getStorage, ref, uploadBytesResumable } from "firebase/storage";
+
+const firebaseConfig = {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+};
+
+firebase.initializeApp(firebaseConfig);
+
 
 declare const GazeRecorderAPI: any;
 declare const GazePlayer: any;
@@ -21,23 +37,23 @@ if (!API_KEY || !MICROSOFT_SPEECH_API_KEY) {
     throw new Error("API_KEY and MICROSOFT_SPEECH_API_KEY must be defined in the environment variables");
 }
 
-// Define the GazeData type
-interface GazeData {
-    docX: number;
-    docY: number;
-    state: number;
-}
+// // Define the GazeData type
+// interface GazeData {
+//     docX: number;
+//     docY: number;
+//     state: number;
+// }
 
-// Define the GazeCloudAPI interface outside the component
-declare const GazeCloudAPI: {
-    OnCalibrationComplete: () => void;
-    OnCamDenied: () => void;
-    OnError: (msg: string) => void;
-    UseClickRecalibration: boolean;
-    OnResult: (data: GazeData) => void;
-    StartEyeTracking: () => void;
-    StopEyeTracking: () => void;
-};
+// // Define the GazeCloudAPI interface outside the component
+// declare const GazeCloudAPI: {
+//     OnCalibrationComplete: () => void;
+//     OnCamDenied: () => void;
+//     OnError: (msg: string) => void;
+//     UseClickRecalibration: boolean;
+//     OnResult: (data: GazeData) => void;
+//     StartEyeTracking: () => void;
+//     StopEyeTracking: () => void;
+// };
 
 const speakText = async (text: string, recognizer: sdk.SpeechRecognizer) => {
     console.log("speakText function called with text:", text);
@@ -107,12 +123,16 @@ const generationConfig = {
     maxOutputTokens: 300,
 };
 
+let mediaRecorderRef: MediaRecorder | null = null;
 
 
 export default function InterviewScreen() {
+
+
     // console.log('InterviewScreen rendered');
 
     const hasFetchedAnswers = useRef(false);
+    const storage = getStorage();
 
     const router = useRouter();
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -124,39 +144,111 @@ export default function InterviewScreen() {
     const { getInterviewDetails, addInterviewHistory } = useFirestore();
     const { addFeedbackAnalysis } = useFirestore();
     const [interviewDetails, setInterviewDetails] = useState(null);
-
+    const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
     const [recognizedTexts, setRecognizedTexts] = useState<string[]>([]);
     const questions = [
         "Yes, please start the interview",
     ];
-    const [currentCalibrationPoint, setCurrentCalibrationPoint] = useState<number>(0);
+    // const [currentCalibrationPoint, setCurrentCalibrationPoint] = useState<number>(0);
 
-    const [webGazerInitialized, setWebGazerInitialized] = useState(false);
-    const [calibrationDone, setCalibrationDone] = useState(false);
-    const calibrationPoints = [
-        { x: '10%', y: '20%' },
-        { x: '50%', y: '50%' },
-        { x: '90%', y: '80%' },
-        { x: '90%', y: '20%' },
-        { x: '10%', y: '80%' },
-        { x: '50%', y: '20%' },
-        { x: '50%', y: '80%' },
-    ];
+    let webcamRef = useRef<Webcam>(null);
+    const [capturing, setCapturing] = useState(false);
 
-    const [validationPoints, setValidationPoints] = useState([
-        { x: '20%', y: '30%' },
-        { x: '80%', y: '30%' },
-        { x: '50%', y: '50%' },
-        // Add more points as needed
-    ]);
-    const [currentValidationPoint, setCurrentValidationPoint] = useState(0);
-    const [validationDone, setValidationDone] = useState(false);
+    const handleStartCaptureClick = () => {
+        setCapturing(true);
+        if (webcamRef.current && webcamRef.current.stream) {
+          const stream = webcamRef.current.stream;
+          if (mediaRecorderRef === null) {
+            mediaRecorderRef = new MediaRecorder(stream, {
+              mimeType: 'video/webm'
+            });
+            console.log('New MediaRecorder instance created');
+          } else {
+            console.log('Existing MediaRecorder instance:', mediaRecorderRef);
+            console.log('MediaRecorder state:', mediaRecorderRef.state);
+          }
+          if (mediaRecorderRef) {
+            mediaRecorderRef.addEventListener('dataavailable', handleDataAvailable);
+            mediaRecorderRef.start();
+            console.log('Video capture started');
+          } else {
+            console.log('Failed to initialize MediaRecorder');
+          }
+        } else {
+          console.log('Webcam stream is not available');
+        }
+      };
 
-    // Function to create a calibration point
 
+    const handleDataAvailable = (e: BlobEvent) => {
+        if (e.data.size > 0) {
+            setRecordedChunks((prev) => prev.concat([e.data]));
+            console.log('Data available from video capture'); // Add this line
+        }
+    };
 
-    const [faceDetected, setFaceDetected] = useState(false);
+    const handleStopCaptureClick = () => {
+        console.log('handleStopCaptureClick started');
+        return new Promise((resolve, reject) => {
+          if (mediaRecorderRef && mediaRecorderRef.state !== 'inactive') {
+            console.log('mediaRecorderRef exists and is active');
+            mediaRecorderRef.addEventListener('stop', () => {
+              console.log('Video capture stopped');
+              setCapturing(false);
+              resolve(null);
+            });
+            console.log('Event listener added');
+            mediaRecorderRef.stop();
+            console.log('mediaRecorderRef stopped');
+          } else {
+            console.log('mediaRecorderRef does not exist or is already inactive');
+            reject('MediaRecorder does not exist or is already inactive');
+          }
+        });
+      };
+      
 
+    const handleUploadVideo = async () => {
+        console.log('handleUploadVideo...'); // Add this line
+        if (!capturing) {
+            handleStartCaptureClick();
+        }
+        await handleStopCaptureClick();
+        const uuidFromPath = router.asPath as string;
+        const uuid = uuidFromPath.substring(1);
+        console.log('UUID:', uuid);
+        if (!uuid) {
+            console.error("UUID is not defined");
+            return;
+        }
+        else {
+            console.log("UUID is defined in handleUploadVideo function.");
+            console.log("UUID: ", uuid);
+        }
+
+        const blob = new Blob(recordedChunks, {
+            type: 'video/webm'
+        });
+        const storage = getStorage();
+        const storageRef = ref(storage, `videos/${uuid}.webm`);
+        const uploadTask = uploadBytesResumable(storageRef, blob);
+
+        console.log('Starting video upload'); // Add this line
+
+        uploadTask.on('state_changed',
+            (snapshot) => {
+                // Handle the upload progress
+            },
+            (error) => {
+                // Handle unsuccessful uploads
+                console.log(error);
+            },
+            () => {
+                // Handle successful uploads on complete
+                console.log('Video uploaded successfully!'); // This line is already there
+            }
+        );
+    };
 
 
 
@@ -166,6 +258,7 @@ export default function InterviewScreen() {
     // Create an audio config for the microphone
     const audioConfig = sdk.AudioConfig.fromDefaultMicrophoneInput();
 
+
     // Create the speech recognizer
     const recognizer = new sdk.SpeechRecognizer(speechConfig, audioConfig);
 
@@ -173,90 +266,7 @@ export default function InterviewScreen() {
 
 
 
-    useEffect(() => {
-        // Load GazeCloudAPI script
-        const cloudScript = document.createElement('script');
-        cloudScript.src = "https://api.gazerecorder.com/GazeCloudAPI.js";
-        cloudScript.async = true;
-        document.body.appendChild(cloudScript);
-
-        // Load GazeRecorderAPI script
-        const recorderScript = document.createElement('script');
-        recorderScript.src = "https://app.gazerecorder.com/GazeRecorderAPI.js";
-        recorderScript.async = true;
-        document.body.appendChild(recorderScript);
-
-        // Load GazePlayer script
-        const playerScript = document.createElement('script');
-        playerScript.src = "https://app.gazerecorder.com/GazePlayer.js";
-        playerScript.async = true;
-        document.body.appendChild(playerScript);
-
-
-        const initializeGazeCloudAPI = () => {
-            const processGaze = (GazeData: GazeData) => {
-                const x_ = GazeData.docX;
-                const y_ = GazeData.docY;
-                // console.log(`Gaze X: ${x_}, Gaze Y: ${y_}`);
-
-                const gazeIndicator = document.getElementById('gazeIndicator');
-                if (gazeIndicator) {
-                    gazeIndicator.style.left = `${x_}px`;
-                    gazeIndicator.style.top = `${y_}px`;
-                } else {
-                    const newGazeIndicator = document.createElement('div');
-                    newGazeIndicator.id = 'gazeIndicator';
-                    newGazeIndicator.style.position = 'absolute';
-                    newGazeIndicator.style.width = '10px';
-                    newGazeIndicator.style.height = '10px';
-                    newGazeIndicator.style.backgroundColor = 'red';
-                    newGazeIndicator.style.borderRadius = '50%';
-                    newGazeIndicator.style.left = `${x_}px`;
-                    newGazeIndicator.style.top = `${y_}px`;
-                    newGazeIndicator.style.zIndex = '9999';
-                    document.body.appendChild(newGazeIndicator);
-                }
-            };
-
-            GazeCloudAPI.OnCalibrationComplete = function () {
-                setCalibrationDone(true);
-                console.log('Gaze Calibration Complete');
-            };
-            GazeCloudAPI.OnCamDenied = function () {
-                console.log('Camera access denied');
-            };
-            GazeCloudAPI.OnError = function (msg: string) {
-                console.log('Error: ' + msg);
-            };
-            GazeCloudAPI.UseClickRecalibration = true;
-            GazeCloudAPI.OnResult = processGaze;
-        };
-
-        cloudScript.onload = () => {
-            initializeGazeCloudAPI();
-            GazeCloudAPI.StartEyeTracking(); // Start eye tracking
-        };
-
-        return () => {
-            document.body.removeChild(cloudScript);
-            document.body.removeChild(recorderScript);
-            document.body.removeChild(playerScript);
-        };
-    }, []);
-
-
-
     const endCall = async () => {
-        // Stop eye tracking and recording
-        GazeCloudAPI.StopEyeTracking();
-        GazeRecorderAPI.StopRec();
-      
-        // Get the recorded session data
-        const sessionReplayData = GazeRecorderAPI.GetRecData();
-      
-        // Play the recorded session
-        GazePlayer.SetCountainer(document.getElementById('playerdiv'));
-        GazePlayer.PlayResultsData(sessionReplayData);
 
 
 
@@ -271,6 +281,9 @@ export default function InterviewScreen() {
         console.log("Call ended. Final history:");
         console.log(history);
 
+
+        // Upload the video
+        await handleUploadVideo();
 
 
 
@@ -408,54 +421,13 @@ export default function InterviewScreen() {
                 setHistory(prevHistory => [...prevHistory, `Interviewer: ${answer}`]);
                 setAnswers(prevAnswers => [...prevAnswers, answer]);
 
-                await speakText(answer, recognizer);
+                // await speakText(answer, recognizer);
             } catch (error) {
                 console.error("Error fetching answer:", error);
             }
         }
     }
 
-
-
-
-
-    // Cohere
-    // const fetchAnswers = async () => {
-    //     let newAnswers: string[] = [];
-
-    //     for (let i = 0; i < questions.length; i++) {
-    //         try {
-    //             console.log(`Fetching answer for question ${i + 1}`);
-    //             setHistory(prevHistory => [...prevHistory, `Candidate: ${questions[i]}`]);
-    //             const chatStream = await cohere.chatStream({
-    //                 chatHistory: [
-    //                     {
-    //                         role: "USER",
-    //                         message: questions[i]
-    //                     }
-    //                 ],
-    //                 message: questions[i],
-    //                 connectors: [{ id: "web-search" }]
-    //             });
-
-    //             let answer = '';
-    //             for await (const message of chatStream) {
-    //                 if (message.eventType === "text-generation") {
-    //                     answer += message.text;
-    //                 }
-    //             }
-
-    //             newAnswers.push(answer);
-    //             console.log(`Answer for question ${i + 1} fetched successfully`);
-    //             setHistory(prevHistory => [...prevHistory, `Interviewer: ${answer}`]);
-    //             setAnswers(prevAnswers => [...prevAnswers, answer]);
-
-    //             await speakText(answer, recognizer);
-    //         } catch (error) {
-    //             console.error("Error fetching answer:", error);
-    //         }
-    //     }
-    // }
 
 
 
@@ -473,98 +445,7 @@ export default function InterviewScreen() {
 
         // console.log('Answers state:', answers);
 
-        if (router.isReady && calibrationDone && router.asPath != '/[id]' && !hasFetchedAnswers.current) {
-
-
-            // Cohere
-            // const fetchData = async () => {
-            //     const uuidFromPath = router.asPath.replace('/', '') as string;
-            //     const data = await getInterviewDetails(uuidFromPath);
-            //     console.log('Data fetched:');
-            //     console.log('Data:', data);
-            //     setInterviewDetails(data);
-            //     let userPrompt: string = "My name is " + data.nameofCandidate + ". This is the content of my resume: " + data.pdfText;
-
-            //     let modelPrompt: string = "I am an AI assistant designed to conduct technical interviews. The job description for this interview is: " + data.description + "I will be asking you these predefined questions at some point in the interview: " + data.questions + "After your response to each question, I may ask follow-up questions based on your answer. I will also be asking questions on these keywords: " + data.keywords + "Please note that I will not acknowledge or confirm if I am an AI model. My role is to simulate a real-life interview experience. I will ask you a series of predefined questions and follow-up questions based on your responses. I expect you to provide detailed, thoughtful, and technically accurate answers. Please note that I will not acknowledge or confirm whether I am an AI model or not. I will keep my questions concise and focused. If your response is incomplete, inaccurate, or lacks sufficient detail, I will provide a short constructive feedback and ask you to clarify or expand your answer. Are you ready to begin the interview?"
-
-            //     console.log('User Prompt:', userPrompt);
-            //     const chatStream = await cohere.chatStream({
-            //         chatHistory: [
-
-            //             {
-            //                 role: "USER",
-            //                 message: "Hi"
-            //             },
-            //             {
-            //                 role: "CHATBOT",
-            //                 message: "Hi"
-            //             }
-            //         ],
-            //         message: userPrompt,
-            //         connectors: [{ id: "web-search" }]
-            //     });
-
-            //     console.log("Chat"); // Debugging statement
-
-            //     console.log("Fetching answers...");
-            //     await fetchAnswers();
-            //     hasFetchedAnswers.current = true;
-            //     navigator.mediaDevices.getUserMedia({ audio: true })
-            //         .then(stream => {
-            //             // Create an audio config from the stream
-            //             const audioConfig = AudioConfig.fromStreamInput(stream);
-
-            //             // Create the speech recognizer
-            //             const recognizer = new SpeechRecognizer(speechConfig, audioConfig);
-
-            //             // Subscribe to the recognized event
-            //             recognizer.recognized = async (s, e) => {
-            //                 if (e.result.reason === ResultReason.RecognizedSpeech) {
-            //                     console.log(`Text Recognized: ${e.result.text}`);
-
-            //                     setRecognizedTexts(prevTexts => [...prevTexts, e.result.text]);
-            //                     setHistory(prevHistory => [...prevHistory, `Candidate: ${e.result.text}`]);
-
-            //                     // Send the recognized text to Cohere API
-            //                     const chatStream = await cohere.chatStream({
-            //                         chatHistory: [
-            //                             {
-            //                                 role: "USER",
-            //                                 message: e.result.text
-            //                             }
-            //                         ],
-            //                         message: e.result.text,
-            //                         connectors: [{ id: "web-search" }]
-            //                     });
-
-            //                     let answer = '';
-            //                     for await (const message of chatStream) {
-            //                         if (message.eventType === "text-generation") {
-            //                             answer += message.text;
-            //                         }
-            //                     }
-
-            //                     setAnswers(prevAnswers => [...prevAnswers, answer]);
-            //                     setHistory(prevHistory => [...prevHistory, `Interviewer: ${answer}`]);
-            //                     await speakText(answer, recognizer);
-            //                 } else if (e.result.reason === ResultReason.NoMatch) {
-            //                     console.log("No speech could be recognized.");
-            //                 }
-            //             };
-
-            //             // Subscribe to the session stopped event
-            //             recognizer.sessionStopped = (s, e) => {
-            //                 console.log("\n    Session stopped event.");
-            //                 recognizer.stopContinuousRecognitionAsync();
-            //             };
-
-            //             // Start continuous recognition
-            //             recognizer.startContinuousRecognitionAsync();
-            //         })
-            //         .catch(error => {
-            //             console.error(`Error getting user media: ${error}`);
-            //         });
-            // };
+        if (router.isReady && router.asPath != '/[id]' && !hasFetchedAnswers.current) {
 
             // Gemini 
             const fetchData = async () => {
@@ -609,21 +490,13 @@ export default function InterviewScreen() {
                 await fetchAnswers(chat);
                 hasFetchedAnswers.current = true;
 
-                // Camera
-                // if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                //     navigator.mediaDevices.getUserMedia({ video: true })
-                //         .then(stream => {
-                //             if (videoRef.current) {
-                //                 videoRef.current.srcObject = stream;
-                //             }
-                //         })
-                //         .catch(err => console.error(err));
-                // }
+
 
                 navigator.mediaDevices.getUserMedia({ audio: true })
                     .then(stream => {
                         // Create an audio config from the stream
                         const audioConfig = AudioConfig.fromStreamInput(stream);
+
 
                         // Create the speech recognizer
                         const recognizer = new SpeechRecognizer(speechConfig, audioConfig);
@@ -647,7 +520,7 @@ export default function InterviewScreen() {
                                 // console.log('Answer:', answer);
                                 setAnswers(prevAnswers => [...prevAnswers, answer]);
                                 setHistory(prevHistory => [...prevHistory, `Interviewer: ${answer}`]);
-                                await speakText(answer, recognizer);
+                                // await speakText(answer, recognizer);
                             } else if (e.result.reason === ResultReason.NoMatch) {
                                 console.log("No speech could be recognized.");
                             }
@@ -672,15 +545,9 @@ export default function InterviewScreen() {
             fetchData();
         }
 
-
-
-
-
-
-
         hasRun.current = true;
         // }
-    }, [router.isReady, calibrationDone]);
+    }, [router.isReady]);
 
 
 
@@ -689,6 +556,21 @@ export default function InterviewScreen() {
 
             <div style={{ display: 'flex', height: '100vh', width: '100%' }}>
                 <div style={{ flex: 1, position: 'relative' }}>
+                    <Webcam
+
+                        height={720}
+                        ref={webcamRef}
+                        screenshotFormat="image/jpeg"
+                        width={1280}
+                        videoConstraints={{
+                            facingMode: 'user'
+                        }}
+                    />
+                    {capturing ? (
+                        <button onClick={handleStopCaptureClick}>Stop Capture</button>
+                    ) : (
+                        <button onClick={handleStartCaptureClick}>Start Capture</button>
+                    )}
                     <button onClick={endCall} style={{
                         position: 'absolute',
                         bottom: '10px',
