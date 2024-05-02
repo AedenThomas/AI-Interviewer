@@ -155,30 +155,41 @@ export default function InterviewScreen() {
     const [capturing, setCapturing] = useState(false);
 
     const handleStartCaptureClick = () => {
-        setCapturing(true);
-        if (webcamRef.current && webcamRef.current.stream) {
-            const stream = webcamRef.current.stream;
-            if (mediaRecorderRef === null) {
-                mediaRecorderRef = new MediaRecorder(stream, {
-                    mimeType: 'video/webm'
-                });
-                console.log('New MediaRecorder instance created');
-            } else {
-                console.log('Existing MediaRecorder instance:', mediaRecorderRef);
+    console.log('handleStartCaptureClick started');
+    setCapturing(true);
+    if (webcamRef.current && webcamRef.current.stream) {
+        startCapture();
+    } else {
+        console.log('Webcam stream is not available, waiting for 1000ms before trying again');
+        setTimeout(handleStartCaptureClick, 1000);
+    }
+};
+
+const startCapture = () => {
+    if (webcamRef.current) {
+        const stream = webcamRef.current.stream;
+        if (stream && mediaRecorderRef === null) {
+            mediaRecorderRef = new MediaRecorder(stream, {
+                mimeType: 'video/webm'
+            });
+            console.log('New MediaRecorder instance created');
+        } else {
+            console.log('Existing MediaRecorder instance:', mediaRecorderRef);
+            if (mediaRecorderRef) {
                 console.log('MediaRecorder state:', mediaRecorderRef.state);
             }
-            if (mediaRecorderRef) {
-                mediaRecorderRef.addEventListener('dataavailable', handleDataAvailable);
-                mediaRecorderRef.start();
-                console.log('Video capture started');
-            } else {
-                console.log('Failed to initialize MediaRecorder');
-            }
-        } else {
-            console.log('Webcam stream is not available');
         }
-    };
-
+        if (mediaRecorderRef) {
+            mediaRecorderRef.addEventListener('dataavailable', handleDataAvailable);
+            mediaRecorderRef.start();
+            console.log('Video capture started');
+        } else {
+            console.log('Failed to initialize MediaRecorder');
+        }
+    } else {
+        console.log('Webcam stream is not available');
+    }
+};
 
     const handleDataAvailable = (e: BlobEvent) => {
         if (e.data.size > 0) {
@@ -267,6 +278,7 @@ export default function InterviewScreen() {
 
 
     const endCall = async () => {
+        
 
 
 
@@ -545,6 +557,8 @@ export default function InterviewScreen() {
 
 
             fetchData();
+            handleStartCaptureClick(); 
+
         }
 
         hasRun.current = true;

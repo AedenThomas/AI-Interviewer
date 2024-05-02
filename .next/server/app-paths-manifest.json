@@ -1,4 +1,4 @@
 {
-  "/page": "app/page.js",
-  "/employerdashboard/page": "app/employerdashboard/page.js"
+  "/employerdashboard/page": "app/employerdashboard/page.js",
+  "/page": "app/page.js"
 }
