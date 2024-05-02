@@ -52,11 +52,11 @@ interface CardProps {
     name: string;
     role: string;
     submittedDaysAgo: String;
-    videoLink: string;
+    firebaseVideoUrl?: string | null; // Accept null values
     feedbackLink: string;
-}
+  }
 
-const UserCard: React.FC<CardProps> = ({ avatarText, name, role, submittedDaysAgo, videoLink, feedbackLink }) => {
+const UserCard: React.FC<CardProps> = ({ avatarText, name, role, submittedDaysAgo, firebaseVideoUrl, feedbackLink }) => {
     return (
         <div className="container grid gap-4 px-4 py-0 md:grid-cols-[1fr_00px] md:gap-8 lg:px-6">
             <div className="grid gap-4">
@@ -84,15 +84,27 @@ const UserCard: React.FC<CardProps> = ({ avatarText, name, role, submittedDaysAg
                                 <CalendarIcon className="w-4 h-4 opacity-50" />
                                 <time className="text-sm font-semibold">Submitted {submittedDaysAgo} </time>
                             </div>
-                  
+
                         </div>
                     </CardContent>
                     <CardFooter>
-                        <a href={videoLink} target="_blank" rel="noopener noreferrer">
-                            <Button className="black-button" style={{ marginRight: '20px', height: '36px' }}>
+                        {firebaseVideoUrl ? (
+                            <Button
+                                className="black-button"
+                                style={{ marginRight: '20px', height: '36px' }}
+                                onClick={() => window.open(firebaseVideoUrl, '_blank')}
+                            >
                                 Play Video
                             </Button>
-                        </a>
+                        ) : (
+                            <Button
+                                className="black-button"
+                                style={{ marginRight: '20px', height: '36px' }}
+                                disabled
+                            >
+                                No Video Available
+                            </Button>
+                        )}
                         <Link href={feedbackLink}>
                             <Button className="black-button" style={{ height: '36px' }}>
                                 View Feedback

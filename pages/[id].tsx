@@ -157,27 +157,27 @@ export default function InterviewScreen() {
     const handleStartCaptureClick = () => {
         setCapturing(true);
         if (webcamRef.current && webcamRef.current.stream) {
-          const stream = webcamRef.current.stream;
-          if (mediaRecorderRef === null) {
-            mediaRecorderRef = new MediaRecorder(stream, {
-              mimeType: 'video/webm'
-            });
-            console.log('New MediaRecorder instance created');
-          } else {
-            console.log('Existing MediaRecorder instance:', mediaRecorderRef);
-            console.log('MediaRecorder state:', mediaRecorderRef.state);
-          }
-          if (mediaRecorderRef) {
-            mediaRecorderRef.addEventListener('dataavailable', handleDataAvailable);
-            mediaRecorderRef.start();
-            console.log('Video capture started');
-          } else {
-            console.log('Failed to initialize MediaRecorder');
-          }
+            const stream = webcamRef.current.stream;
+            if (mediaRecorderRef === null) {
+                mediaRecorderRef = new MediaRecorder(stream, {
+                    mimeType: 'video/webm'
+                });
+                console.log('New MediaRecorder instance created');
+            } else {
+                console.log('Existing MediaRecorder instance:', mediaRecorderRef);
+                console.log('MediaRecorder state:', mediaRecorderRef.state);
+            }
+            if (mediaRecorderRef) {
+                mediaRecorderRef.addEventListener('dataavailable', handleDataAvailable);
+                mediaRecorderRef.start();
+                console.log('Video capture started');
+            } else {
+                console.log('Failed to initialize MediaRecorder');
+            }
         } else {
-          console.log('Webcam stream is not available');
+            console.log('Webcam stream is not available');
         }
-      };
+    };
 
 
     const handleDataAvailable = (e: BlobEvent) => {
@@ -190,23 +190,23 @@ export default function InterviewScreen() {
     const handleStopCaptureClick = () => {
         console.log('handleStopCaptureClick started');
         return new Promise((resolve, reject) => {
-          if (mediaRecorderRef && mediaRecorderRef.state !== 'inactive') {
-            console.log('mediaRecorderRef exists and is active');
-            mediaRecorderRef.addEventListener('stop', () => {
-              console.log('Video capture stopped');
-              setCapturing(false);
-              resolve(null);
-            });
-            console.log('Event listener added');
-            mediaRecorderRef.stop();
-            console.log('mediaRecorderRef stopped');
-          } else {
-            console.log('mediaRecorderRef does not exist or is already inactive');
-            reject('MediaRecorder does not exist or is already inactive');
-          }
+            if (mediaRecorderRef && mediaRecorderRef.state !== 'inactive') {
+                console.log('mediaRecorderRef exists and is active');
+                mediaRecorderRef.addEventListener('stop', () => {
+                    console.log('Video capture stopped');
+                    setCapturing(false);
+                    resolve(null);
+                });
+                console.log('Event listener added');
+                mediaRecorderRef.stop();
+                console.log('mediaRecorderRef stopped');
+            } else {
+                console.log('mediaRecorderRef does not exist or is already inactive');
+                reject('MediaRecorder does not exist or is already inactive');
+            }
         });
-      };
-      
+    };
+
 
     const handleUploadVideo = async () => {
         console.log('handleUploadVideo...'); // Add this line
@@ -284,6 +284,8 @@ export default function InterviewScreen() {
 
         // Upload the video
         await handleUploadVideo();
+
+        
 
 
 
@@ -421,7 +423,7 @@ export default function InterviewScreen() {
                 setHistory(prevHistory => [...prevHistory, `Interviewer: ${answer}`]);
                 setAnswers(prevAnswers => [...prevAnswers, answer]);
 
-                // await speakText(answer, recognizer);
+                await speakText(answer, recognizer);
             } catch (error) {
                 console.error("Error fetching answer:", error);
             }
@@ -520,7 +522,7 @@ export default function InterviewScreen() {
                                 // console.log('Answer:', answer);
                                 setAnswers(prevAnswers => [...prevAnswers, answer]);
                                 setHistory(prevHistory => [...prevHistory, `Interviewer: ${answer}`]);
-                                // await speakText(answer, recognizer);
+                                await speakText(answer, recognizer);
                             } else if (e.result.reason === ResultReason.NoMatch) {
                                 console.log("No speech could be recognized.");
                             }

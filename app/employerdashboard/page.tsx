@@ -12,7 +12,7 @@ import ClipLoader from "react-spinners/ClipLoader";
 import { formatDistanceToNow } from 'date-fns';
 import { useRouter } from 'next/navigation'; // import useRouter from next/router
 import useAuth from '@/hooks/useAuth'; // import the useAuth hook
-
+import { getStorage, ref, getDownloadURL, getMetadata } from "firebase/storage";
 
 interface Interview {
   uuid: string;
@@ -22,9 +22,11 @@ interface Interview {
     seconds: number;
     nanoseconds: number;
   };
+  firebaseVideoUrl?: string; // Add this line
 }
 
 export default function Employerdashboard() {
+  const storage = getStorage();
   const { getAllInterviews } = useFirestore();
   const [interviews, setInterviews] = useState<Interview[]>([]); // use the Interview type here
   const [loading, setLoading] = useState(true);
@@ -33,7 +35,39 @@ export default function Employerdashboard() {
   const { user } = useAuth(); // get the user object from useAuth
   const { initializing } = useAuth();
 
-  
+  async function getFirebaseVideoUrl(uuid: string) {
+    const videoRef = ref(storage, `videos/${uuid}.webm`);
+    try {
+      await getMetadata(videoRef); // Check if the file exists
+      return await getDownloadURL(videoRef);
+    } catch (error) {
+      // If the file doesn't exist, return null or a default value
+      console.error(`Error getting video URL for ${uuid}:`, error);
+      return null;
+    }
+  }
+
+  const [videoUrls, setVideoUrls] = useState<{ [uuid: string]: string | null }>({});
+
+  useEffect(() => {
+    // Fetch all video URLs
+    Promise.all(
+      interviews.map(interview =>
+        getFirebaseVideoUrl(interview.uuid).then(url => ({ uuid: interview.uuid, url }))
+      )
+    ).then(urls => {
+      // Convert the array of URLs to an object for easier access
+      const urlObject = urls.reduce<{ [uuid: string]: string | null }>((obj, item) => {
+        if (item.url !== null) {
+          obj[item.uuid] = item.url;
+        }
+        return obj;
+      }, {});
+      setVideoUrls(urlObject);
+    });
+  }, [interviews]);
+
+
   useEffect(() => {
     if (!initializing) { // If onAuthStateChanged has completed
       if (user) { // If user is logged in
@@ -49,17 +83,17 @@ export default function Employerdashboard() {
             setLoading(false);
           }
         };
-        
-    
+
+
         fetchData();
       } else {
         router.push('/login'); // If user is not logged in, redirect to login
       }
     }
   }, [user, initializing]); // This runs every time the 'user' or 'initializing' state changes
-  
-    
-  
+
+
+
 
 
   return (
@@ -91,7 +125,7 @@ export default function Employerdashboard() {
 
 
           {[...interviews].sort((a, b) => b.createdDate.seconds - a.createdDate.seconds).map((interview, index) => {
-            const submittedDate = new Date(interview.createdDate.seconds * 1000); // convert to milliseconds
+            const submittedDate = new Date(interview.createdDate.seconds * 1000);
             const submittedDaysAgo = formatDistanceToNow(submittedDate, { addSuffix: true });
 
             return (
@@ -101,17 +135,11 @@ export default function Employerdashboard() {
                 name={interview.nameofCandidate}
                 role={interview.jobTitle}
                 submittedDaysAgo={submittedDaysAgo}
-                videoLink="https://youtu.be/dQw4w9WgXcQ?si=N7WLEhVQgPjy1UGl"
+                firebaseVideoUrl={videoUrls[interview.uuid] ?? ''} // Use an empty string as the default value
                 feedbackLink={`/feedback/${interview.uuid}`}
               />
             );
           })}
-
-
-
-
-
-
         </div>
 
       )}
