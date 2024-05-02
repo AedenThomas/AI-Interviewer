@@ -27,11 +27,7 @@ const [interviewDetails, setInterviewDetails] = useState<InterviewDetails | null
         articulation: number;
         listeningSkills: number;
       };
-      confidence: {
-        bodyLanguage: number;
-        eyeContact: number;
-        posture: number;
-      };
+     
       relevantKeywords: {
         industryTerms: number;
         keyPhrases: number;
@@ -200,44 +196,7 @@ setInterviewDetails(interviewDetails);
                   </Card>
 
 
-                  <Card>
-                    <CardHeader className="flex flex-col gap-1">
-                      <CardTitle>Confidence</CardTitle>
-                      <CardDescription>The candidate&apos;s level of confidence during the interview.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-4">
-                      <div className="flex items-center gap-4">
-                        <h3 className="w-24">Body Language</h3>
-                        <Progress
-                          className="w-full rounded-full custom-progress"
-                          percent={feedbackAnalysis?.evaluation?.confidence.bodyLanguage}
-                          strokeColor="black"
-                          trailColor="grey"
-                        />
-
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <h3 className="w-24">Eye Contact</h3>
-                        <Progress
-                          className="w-full rounded-full custom-progress"
-                          percent={feedbackAnalysis?.evaluation?.confidence.eyeContact}
-                          strokeColor="black"
-                          trailColor="grey"
-                        />
-
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <h3 className="w-24">Posture</h3>
-                        <Progress
-                          className="w-full rounded-full custom-progress"
-                          percent={feedbackAnalysis?.evaluation?.confidence.posture}
-                          strokeColor="black"
-                          trailColor="grey"
-                        />
-
-                      </div>
-                    </CardContent>
-                  </Card>
+                  
 
                   <Card>
                     <CardHeader className="flex flex-col gap-1">
