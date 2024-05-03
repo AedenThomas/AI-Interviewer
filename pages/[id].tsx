@@ -14,6 +14,8 @@ import Webcam from 'react-webcam';
 import 'firebase/storage';
 import * as firebase from 'firebase/app';
 import { getStorage, ref, uploadBytesResumable } from "firebase/storage";
+import LinearProgress from '@mui/material/LinearProgress';
+import Dialog from '@mui/material/Dialog';
 
 const firebaseConfig = {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -116,7 +118,8 @@ export default function InterviewScreen() {
 
     const hasFetchedAnswers = useRef(false);
     const storage = getStorage();
-
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
     const router = useRouter();
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const [history, setHistory] = useState<string[]>([]);
@@ -346,7 +349,7 @@ export default function InterviewScreen() {
             console.error('Error in stopping video capture or uploading:', error);
         }
 
-       
+
 
 
         const uuidFromPath = router.asPath as string;
@@ -361,7 +364,7 @@ export default function InterviewScreen() {
         console.log(history);
 
 
-      
+
 
 
 
@@ -480,14 +483,14 @@ export default function InterviewScreen() {
             if (mediaRecorderRef && mediaRecorderRef.state === 'recording') {
                 console.log(`MediaRecorder is active. Current state: ${mediaRecorderRef.state}`);
                 let chunks: Blob[] = [];
-    
+
                 mediaRecorderRef.addEventListener('dataavailable', (e: BlobEvent) => {
                     if (e.data.size > 0) {
                         chunks.push(e.data);
                         console.log('Data available from video capture');
                     }
                 });
-    
+
                 mediaRecorderRef.onstop = () => {
                     console.log('MediaRecorder stopped');
                     if (chunks.length > 0) {
@@ -498,7 +501,7 @@ export default function InterviewScreen() {
                         reject('No data available');
                     }
                 };
-    
+
                 console.log('Stopping MediaRecorder');
                 mediaRecorderRef.stop();
             } else {
@@ -511,7 +514,9 @@ export default function InterviewScreen() {
 
     const handleUploadVideo = async (chunks: Blob[]) => {
         console.log('handleUploadVideo...'); // Add this line
-       
+
+        setDialogOpen(true);
+
         const uuidFromPath = router.asPath as string;
         const uuid = uuidFromPath.substring(1);
         console.log('UUID:', uuid);
@@ -537,17 +542,21 @@ export default function InterviewScreen() {
         console.log('Starting video upload'); // Add this line
 
         uploadTask.on('state_changed',
-        (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            console.log(`Upload is ${progress}% done`);
-        },
-        (error) => {
-            console.error('Upload failed:', error);
-        },
-        () => {
-            console.log('Video uploaded successfully!');
-        }
-    );
+            (snapshot) => {
+                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                console.log(`Upload is ${progress}% done`);
+                setUploadProgress(progress);
+            },
+            (error) => {
+                console.error('Upload failed:', error);
+                setDialogOpen(false); // Close the dialog on error
+            },
+            () => {
+                console.log('Video uploaded successfully!');
+                setUploadProgress(0); // Reset progress after upload
+                setDialogOpen(false); // Close the dialog after upload
+            }
+        );
     };
 
     return (
@@ -565,7 +574,7 @@ export default function InterviewScreen() {
                             facingMode: 'user'
                         }}
                     />
-                   
+
                     <button onClick={endCall} style={{
                         position: 'absolute',
                         bottom: '10px',
@@ -606,7 +615,12 @@ export default function InterviewScreen() {
                     </div>
                 </div>
             </div>
-
+            <Dialog open={dialogOpen}>
+                <div style={{ padding: '20px', textAlign: 'center' }}>
+                    <Typography variant="h6">Processing...</Typography>
+                    <LinearProgress variant="determinate" value={uploadProgress} style={{ marginTop: '20px' }} />
+                </div>
+            </Dialog>
         </Layout>
     );
 
