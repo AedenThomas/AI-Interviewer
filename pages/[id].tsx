@@ -40,37 +40,53 @@ if (!API_KEY || !MICROSOFT_SPEECH_API_KEY) {
 }
 
 
-const speakText = async (text: string, recognizer: sdk.SpeechRecognizer) => {
+const speakText = async (text: string, recognizer: sdk.SpeechRecognizer, signal: AbortSignal) => {
+    if (signal.aborted) {
+        console.log('Speech synthesis aborted.');
+        return;
+    }
+
     console.log("speakText function called with text:", text);
     const speechConfig = sdk.SpeechConfig.fromSubscription(MICROSOFT_SPEECH_API_KEY, "centralindia");
     const audioConfig = sdk.AudioConfig.fromDefaultSpeakerOutput();
     speechConfig.speechSynthesisVoiceName = "en-US-JennyNeural";
     const synthesizer = new sdk.SpeechSynthesizer(speechConfig, audioConfig);
 
-    console.log("Stopping recognizer...");
+    if (signal.aborted) {
+        console.log('Speech synthesis aborted before stopping recognizer.');
+        synthesizer.close();
+        return;
+    }
+
     await recognizer.stopContinuousRecognitionAsync();
-    console.log("Recognizer stopped.");
 
     return new Promise((resolve, reject) => {
-        console.log("Starting to speak text...");
+        if (signal.aborted) {
+            console.log('Speech synthesis aborted before starting to speak text.');
+            synthesizer.close();
+            return;
+        }
+
         synthesizer.speakTextAsync(text,
             async function (result) {
-                console.log("speakTextAsync callback called with result:", result);
-                if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
-                    console.log("synthesis finished.");
+                if (signal.aborted) {
+                    console.log('Speech synthesis aborted during synthesis.');
                     synthesizer.close();
-                    console.log("Synthesizer closed.");
-                    console.log("result.audioDuration:", result.audioDuration);
+                    return;
+                }
 
+                if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
+                    synthesizer.close();
 
                     const speechDurationMs = result.audioDuration / 10000;
 
+                    if (signal.aborted) {
+                        console.log('Speech synthesis aborted before starting recognizer.');
+                        return;
+                    }
 
-                    console.log(`Waiting for ${speechDurationMs} ms before starting recognizer...`);
                     await new Promise(resolve => setTimeout(resolve, speechDurationMs));
-                    console.log("Starting recognizer...");
                     recognizer.startContinuousRecognitionAsync();
-                    console.log("Recognizer started.");
 
                     resolve(null);
                 } else {
@@ -81,15 +97,16 @@ const speakText = async (text: string, recognizer: sdk.SpeechRecognizer) => {
             function (err) {
                 console.trace("speakTextAsync error callback called with error:", err);
                 synthesizer.close();
-                console.log("Synthesizer closed due to error.");
                 reject(err);
             }
         );
     }).catch((err) => {
+        if (signal.aborted) {
+            console.log('Speech synthesis aborted after error.');
+            return;
+        }
 
-        console.log("Error occurred, starting recognizer...");
         recognizer.startContinuousRecognitionAsync();
-        console.log("Recognizer started after error.");
         throw err;
     });
 }
@@ -114,7 +131,12 @@ let mediaRecorderRef: MediaRecorder | null = null;
 export default function InterviewScreen() {
 
 
+
     // console.log('InterviewScreen rendered');
+
+    const [abortController, setAbortController] = useState(new AbortController());
+    let isSpeaking = false;
+
 
     const hasFetchedAnswers = useRef(false);
     const storage = getStorage();
@@ -141,12 +163,12 @@ export default function InterviewScreen() {
     const [capturing, setCapturing] = useState(false);
 
     const handleStartCaptureClick = () => {
-        console.log('handleStartCaptureClick started');
+        // console.log('handleStartCaptureClick started');
         setCapturing(true);
         if (webcamRef.current && webcamRef.current.stream) {
             startCapture();
         } else {
-            console.log('Webcam stream is not available, waiting for 1000ms before trying again');
+            // console.log('Webcam stream is not available, waiting for 1000ms before trying again');
             setTimeout(handleStartCaptureClick, 1000);
         }
     };
@@ -158,22 +180,22 @@ export default function InterviewScreen() {
                 mediaRecorderRef = new MediaRecorder(stream, {
                     mimeType: 'video/webm'
                 });
-                console.log('New MediaRecorder instance created');
+                // console.log('New MediaRecorder instance created');
             } else {
-                console.log('Existing MediaRecorder instance:', mediaRecorderRef);
+                // console.log('Existing MediaRecorder instance:', mediaRecorderRef);
                 if (mediaRecorderRef) {
-                    console.log('MediaRecorder state:', mediaRecorderRef.state);
+                    // console.log('MediaRecorder state:', mediaRecorderRef.state);
                 }
             }
             if (mediaRecorderRef) {
                 mediaRecorderRef.addEventListener('dataavailable', handleDataAvailable);
                 mediaRecorderRef.start();
-                console.log('Video capture started');
+                // console.log('Video capture started');
             } else {
-                console.log('Failed to initialize MediaRecorder');
+                // console.log('Failed to initialize MediaRecorder');
             }
         } else {
-            console.log('Webcam stream is not available');
+            // console.log('Webcam stream is not available');
         }
     };
 
@@ -191,27 +213,50 @@ export default function InterviewScreen() {
 
 
     // Google Gemini AI
-    const fetchAnswers = async (chat: any) => {
+    const fetchAnswers = async (chat: any, signal: any) => {
+        if (signal.aborted) {
+            console.log('Fetching answers aborted.');
+            return;
+        }
+        else{
+            console.log('Fetching answers not aborted.');
+        }
+        console.log("Fetching answers...");
+
         let newAnswers: string[] = [];
 
         for (let i = 0; i < questions.length; i++) {
+            if (signal.aborted) {
+                console.log('Fetching answers aborted.');
+                return;
+            }
             try {
-                console.log(`Fetching answer for question ${i + 1}`);
+                // console.log(`Fetching answer for question ${i + 1}`);
                 setHistory(prevHistory => [...prevHistory, `Candidate: ${questions[i]}`]);
                 const response = await chat.sendMessageStream(questions[i]);
 
+                if (signal.aborted) {
+                    console.log('Fetching answers aborted.');
+                    return;
+                }
+
+                
                 let answer = '';
                 for await (const chunk of response.stream) {
+                    if (signal.aborted) {
+                        console.log('Fetching answers aborted.');
+                        return;
+                    }
                     const chunkText = await chunk.text();
                     answer += chunkText;
                 }
 
                 newAnswers.push(answer);
-                console.log(`Answer for question ${i + 1} fetched successfully`);
+                // console.log(`Answer for question ${i + 1} fetched successfully`);
                 setHistory(prevHistory => [...prevHistory, `Interviewer: ${answer}`]);
                 setAnswers(prevAnswers => [...prevAnswers, answer]);
 
-                await speakText(answer, recognizer);
+                await speakText(answer, recognizer, signal);
             } catch (error) {
                 console.error("Error fetching answer:", error);
             }
@@ -237,8 +282,8 @@ export default function InterviewScreen() {
                 // console.log('Fetching data...');
                 const uuidFromPath = router.asPath.replace('/', '') as string;
                 const data = await getInterviewDetails(uuidFromPath);
-                console.log('Data fetched:');
-                console.log('Data:', data);
+                // console.log('Data fetched:');
+                // console.log('Data:', data);
                 setInterviewDetails(data);
 
 
@@ -266,19 +311,25 @@ export default function InterviewScreen() {
                     ],
                 });
 
-                console.log("Chat"); // Debugging statement
+                // console.log("Chat"); // Debugging statement
 
                 // console.log("Fetching answers...");
                 // fetchAnswers(chat, data.questions);
 
-                console.log("Fetching answers...");
-                await fetchAnswers(chat);
+                // console.log("Fetching answers...");
+                console.log('Status of abortController inside fetchData:', abortController.signal.aborted);
+                await fetchAnswers(chat, abortController.signal);
                 hasFetchedAnswers.current = true;
 
 
 
                 navigator.mediaDevices.getUserMedia({ audio: true })
                     .then(stream => {
+                        if (abortController.signal.aborted) {
+                            console.log('Speech-to-text aborted.');
+                            return;
+                        }
+
                         // Create an audio config from the stream
                         const audioConfig = AudioConfig.fromStreamInput(stream);
 
@@ -288,8 +339,13 @@ export default function InterviewScreen() {
 
                         // Subscribe to the recognized event
                         recognizer.recognized = async (s, e) => {
+                            if (abortController.signal.aborted) {
+                                console.log('Speech-to-text aborted.');
+                                return;
+                            }
+
                             if (e.result.reason === ResultReason.RecognizedSpeech) {
-                                console.log(`Text Recognized:`);
+                                // console.log(`Text Recognized:`);
                                 // console.log(`Text Recognized: ${e.result.text}`);
 
                                 setRecognizedTexts(prevTexts => [...prevTexts, e.result.text]);
@@ -305,15 +361,21 @@ export default function InterviewScreen() {
                                 // console.log('Answer:', answer);
                                 setAnswers(prevAnswers => [...prevAnswers, answer]);
                                 setHistory(prevHistory => [...prevHistory, `Interviewer: ${answer}`]);
-                                await speakText(answer, recognizer);
+                                console.log('Status of abortController inside recognized event:', abortController.signal.aborted);
+                                await speakText(answer, recognizer, abortController.signal);
                             } else if (e.result.reason === ResultReason.NoMatch) {
-                                console.log("No speech could be recognized.");
+                                // console.log("No speech could be recognized.");
                             }
                         };
 
                         // Subscribe to the session stopped event
                         recognizer.sessionStopped = (s, e) => {
-                            console.log("\n    Session stopped event.");
+                            if (abortController.signal.aborted) {
+                                console.log('Speech-to-text aborted.');
+                                return;
+                            }
+                            
+                            // console.log("\n    Session stopped event.");
                             recognizer.stopContinuousRecognitionAsync();
                         };
 
@@ -340,9 +402,15 @@ export default function InterviewScreen() {
 
     const endCall = async () => {
 
+        console.log('Aborting operations...');
+        abortController.abort();
+        console.log('Operations aborted.');
+        console.log('AbortController status:', abortController.signal.aborted);
+        setAbortController(new AbortController()); // Reset the AbortController
+
         try {
             const videoChunks = await handleStopCaptureClick();
-            console.log('Video capture stopped successfully.');
+            // console.log('Video capture stopped successfully.');
             await handleUploadVideo(videoChunks); // Pass chunks directly
 
         } catch (error) {
@@ -354,14 +422,14 @@ export default function InterviewScreen() {
 
         const uuidFromPath = router.asPath as string;
         const uuid = uuidFromPath.substring(1);
-        console.log('UUID:', uuid);
+        // console.log('UUID:', uuid);
         if (!uuid) {
-            console.log("UUID is not defined");
+            // console.log("UUID is not defined");
             return;
         }
 
-        console.log("Call ended. Final history:");
-        console.log(history);
+        // console.log("Call ended. Final history:");
+        // console.log(history);
 
 
 
@@ -371,9 +439,9 @@ export default function InterviewScreen() {
         // Add the history to Firestore
         const success = await addInterviewHistory(uuid as string, history);
         if (success) {
-            console.log("Interview history added successfully");
+            // console.log("Interview history added successfully");
         } else {
-            console.log("Error adding interview history");
+            // console.log("Error adding interview history");
         }
 
         // Send the history to Google's AI
@@ -444,14 +512,14 @@ export default function InterviewScreen() {
 
         // Log the feedbackAnalysis
         feedbackAnalysis = feedbackAnalysis.replace(/```/g, '');
-        console.log("Feedback analysis:");
+        // console.log("Feedback analysis:");
         // console.log("feedbackAnalysis" + feedbackAnalysis);
 
         // Check if feedbackAnalysis is a valid JSON string
         try {
             let cleanedFeedbackAnalysis = feedbackAnalysis.replace(/^JSON\n/, '').trim();
             let responseJSON = JSON.parse(cleanedFeedbackAnalysis);
-            console.log("Response JSON:");
+            // console.log("Response JSON:");
             // console.log("Response JSON:", responseJSON);
         } catch (error) {
             console.error("Invalid JSON string:", feedbackAnalysis);
@@ -460,9 +528,9 @@ export default function InterviewScreen() {
 
         const successForFeedback = await addFeedbackAnalysis(uuid as string, feedbackAnalysis);
         if (successForFeedback) {
-            console.log("Feedback analysis added successfully");
+            // console.log("Feedback analysis added successfully");
         } else {
-            console.log("Error adding feedback analysis");
+            // console.log("Error adding feedback analysis");
         }
 
 
@@ -473,39 +541,39 @@ export default function InterviewScreen() {
     const handleDataAvailable = (e: BlobEvent) => {
         if (e.data.size > 0) {
             setRecordedChunks((prev) => prev.concat([e.data]));
-            console.log('Data available from video capture'); // Add this line
+            // console.log('Data available from video capture'); // Add this line
         }
     };
 
     const handleStopCaptureClick = (): Promise<Blob[]> => {
-        console.log('handleStopCaptureClick started');
+        // console.log('handleStopCaptureClick started');
         return new Promise((resolve, reject) => {
             if (mediaRecorderRef && mediaRecorderRef.state === 'recording') {
-                console.log(`MediaRecorder is active. Current state: ${mediaRecorderRef.state}`);
+                // console.log(`MediaRecorder is active. Current state: ${mediaRecorderRef.state}`);
                 let chunks: Blob[] = [];
 
                 mediaRecorderRef.addEventListener('dataavailable', (e: BlobEvent) => {
                     if (e.data.size > 0) {
                         chunks.push(e.data);
-                        console.log('Data available from video capture');
+                        // console.log('Data available from video capture');
                     }
                 });
 
                 mediaRecorderRef.onstop = () => {
-                    console.log('MediaRecorder stopped');
+                    // console.log('MediaRecorder stopped');
                     if (chunks.length > 0) {
                         setRecordedChunks(chunks); // Update state once with all chunks
                         resolve(chunks); // Resolve with chunks for immediate use
-                        console.log('Promise resolved with data');
+                        // console.log('Promise resolved with data');
                     } else {
                         reject('No data available');
                     }
                 };
 
-                console.log('Stopping MediaRecorder');
+                // console.log('Stopping MediaRecorder');
                 mediaRecorderRef.stop();
             } else {
-                console.log('MediaRecorder does not exist or is not active');
+                // console.log('MediaRecorder does not exist or is not active');
                 resolve([]);
             }
         });
@@ -513,24 +581,24 @@ export default function InterviewScreen() {
 
 
     const handleUploadVideo = async (chunks: Blob[]) => {
-        console.log('handleUploadVideo...'); // Add this line
+        // console.log('handleUploadVideo...'); // Add this line
 
         setDialogOpen(true);
 
         const uuidFromPath = router.asPath as string;
         const uuid = uuidFromPath.substring(1);
-        console.log('UUID:', uuid);
+        // console.log('UUID:', uuid);
         if (!uuid) {
             console.error("UUID is not defined");
             return;
         }
         else {
-            console.log("UUID is defined in handleUploadVideo function.");
-            console.log("UUID: ", uuid);
+            // console.log("UUID is defined in handleUploadVideo function.");
+            // console.log("UUID: ", uuid);
         }
         const blob = new Blob(chunks, { type: 'video/webm' });
 
-        console.log(`Video size: ${blob.size} bytes`);
+        // console.log(`Video size: ${blob.size} bytes`);
         if (blob.size === 0) {
             console.error("No video data to upload.");
             return;
@@ -539,12 +607,12 @@ export default function InterviewScreen() {
         const storageRef = ref(storage, `videos/${uuid}.webm`);
         const uploadTask = uploadBytesResumable(storageRef, blob);
 
-        console.log('Starting video upload'); // Add this line
+        // console.log('Starting video upload'); // Add this line
 
         uploadTask.on('state_changed',
             (snapshot) => {
                 const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                console.log(`Upload is ${progress}% done`);
+                // console.log(`Upload is ${progress}% done`);
                 setUploadProgress(progress);
             },
             (error) => {
@@ -552,7 +620,7 @@ export default function InterviewScreen() {
                 setDialogOpen(false); // Close the dialog on error
             },
             () => {
-                console.log('Video uploaded successfully!');
+                // console.log('Video uploaded successfully!');
                 setUploadProgress(0); // Reset progress after upload
                 setDialogOpen(false); // Close the dialog after upload
             }
