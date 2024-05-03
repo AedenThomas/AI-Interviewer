@@ -29,8 +29,28 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 
+
 declare const GazeRecorderAPI: any;
 declare const GazePlayer: any;
+
+interface GazeData {
+    docX: number;
+    docY: number;
+    state: number;
+}
+
+// Define the GazeCloudAPI interface outside the component
+declare const GazeCloudAPI: {
+    OnCalibrationComplete: () => void;
+    OnCamDenied: () => void;
+    OnError: (msg: string) => void;
+    UseClickRecalibration: boolean;
+    OnResult: (data: GazeData) => void;
+    StartEyeTracking: () => void;
+    StopEyeTracking: () => void;
+};
+
+
 
 const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY; // API key for Google Generative AI. Put it in .env
 const MICROSOFT_SPEECH_API_KEY = process.env.NEXT_PUBLIC_MICROSOFT_SPEECH_API_KEY || ''; // API key for Microsoft Speech API. Put it in .env
@@ -154,6 +174,106 @@ export default function InterviewScreen() {
     const [interviewDetails, setInterviewDetails] = useState(null);
     const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
     const [recognizedTexts, setRecognizedTexts] = useState<string[]>([]);
+    const [currentCalibrationPoint, setCurrentCalibrationPoint] = useState<number>(0);
+
+    const [webGazerInitialized, setWebGazerInitialized] = useState(false);
+    const [calibrationDone, setCalibrationDone] = useState(false);
+    const calibrationPoints = [
+        { x: '10%', y: '20%' },
+        { x: '50%', y: '50%' },
+        { x: '90%', y: '80%' },
+        { x: '90%', y: '20%' },
+        { x: '10%', y: '80%' },
+        { x: '50%', y: '20%' },
+        { x: '50%', y: '80%' },
+    ];
+
+    const [validationPoints, setValidationPoints] = useState([
+        { x: '20%', y: '30%' },
+        { x: '80%', y: '30%' },
+        { x: '50%', y: '50%' },
+        // Add more points as needed
+    ]);
+    const [currentValidationPoint, setCurrentValidationPoint] = useState(0);
+    const [validationDone, setValidationDone] = useState(false);
+
+    // Function to create a calibration point
+
+
+    const [faceDetected, setFaceDetected] = useState(false);
+
+
+    useEffect(() => {
+        // Load GazeCloudAPI script
+        const cloudScript = document.createElement('script');
+        cloudScript.src = "https://api.gazerecorder.com/GazeCloudAPI.js";
+        cloudScript.async = true;
+        document.body.appendChild(cloudScript);
+
+        // Load GazeRecorderAPI script
+        const recorderScript = document.createElement('script');
+        recorderScript.src = "https://app.gazerecorder.com/GazeRecorderAPI.js";
+        recorderScript.async = true;
+        document.body.appendChild(recorderScript);
+
+        // Load GazePlayer script
+        const playerScript = document.createElement('script');
+        playerScript.src = "https://app.gazerecorder.com/GazePlayer.js";
+        playerScript.async = true;
+        document.body.appendChild(playerScript);
+
+
+        const initializeGazeCloudAPI = () => {
+            const processGaze = (GazeData: GazeData) => {
+                const x_ = GazeData.docX;
+                const y_ = GazeData.docY;
+                // console.log(`Gaze X: ${x_}, Gaze Y: ${y_}`);
+
+                const gazeIndicator = document.getElementById('gazeIndicator');
+                if (gazeIndicator) {
+                    gazeIndicator.style.left = `${x_}px`;
+                    gazeIndicator.style.top = `${y_}px`;
+                } else {
+                    const newGazeIndicator = document.createElement('div');
+                    newGazeIndicator.id = 'gazeIndicator';
+                    newGazeIndicator.style.position = 'absolute';
+                    newGazeIndicator.style.width = '10px';
+                    newGazeIndicator.style.height = '10px';
+                    newGazeIndicator.style.backgroundColor = 'red';
+                    newGazeIndicator.style.borderRadius = '50%';
+                    newGazeIndicator.style.left = `${x_}px`;
+                    newGazeIndicator.style.top = `${y_}px`;
+                    newGazeIndicator.style.zIndex = '9999';
+                    document.body.appendChild(newGazeIndicator);
+                }
+            };
+
+            GazeCloudAPI.OnCalibrationComplete = function () {
+                setCalibrationDone(true);
+                console.log('Gaze Calibration Complete');
+            };
+            GazeCloudAPI.OnCamDenied = function () {
+                console.log('Camera access denied');
+            };
+            GazeCloudAPI.OnError = function (msg: string) {
+                console.log('Error: ' + msg);
+            };
+            GazeCloudAPI.UseClickRecalibration = true;
+            GazeCloudAPI.OnResult = processGaze;
+        };
+
+        cloudScript.onload = () => {
+            initializeGazeCloudAPI();
+            GazeCloudAPI.StartEyeTracking(); // Start eye tracking
+        };
+
+        return () => {
+            document.body.removeChild(cloudScript);
+            document.body.removeChild(recorderScript);
+            document.body.removeChild(playerScript);
+        };
+    }, []);
+
     const questions = [
         "Yes, please start the interview",
     ];
@@ -161,6 +281,7 @@ export default function InterviewScreen() {
 
     let webcamRef = useRef<Webcam>(null);
     const [capturing, setCapturing] = useState(false);
+
 
     const handleStartCaptureClick = () => {
         // console.log('handleStartCaptureClick started');
@@ -275,7 +396,7 @@ export default function InterviewScreen() {
 
         // console.log('Answers state:', answers);
 
-        if (router.isReady && router.asPath != '/[id]' && !hasFetchedAnswers.current) {
+        if (router.isReady && calibrationDone && router.asPath != '/[id]' && !hasFetchedAnswers.current) {
 
             // Gemini 
             const fetchData = async () => {
@@ -396,11 +517,15 @@ export default function InterviewScreen() {
 
         hasRun.current = true;
         // }
-    }, [router.isReady]);
+    }, [router.isReady, calibrationDone]);
 
 
 
     const endCall = async () => {
+
+        // Stop eye tracking and recording
+        GazeCloudAPI.StopEyeTracking();
+        GazeRecorderAPI.StopRec();
 
         console.log('Aborting operations...');
         abortController.abort();
