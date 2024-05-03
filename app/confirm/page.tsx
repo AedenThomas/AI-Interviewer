@@ -26,11 +26,6 @@ function ConfirmationPage() { // Remove the router prop
   let interviewData = searchParams ? JSON.parse(searchParams.get('data') || '') : null;
   console.log('interviewData', interviewData);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(`${window.location.origin}/${uuid}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   return (
     <Layout>

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { FaCheck, FaCopy } from 'react-icons/fa';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -54,9 +55,11 @@ interface CardProps {
     submittedDaysAgo: String;
     firebaseVideoUrl?: string | null; // Accept null values
     feedbackLink: string;
-  }
+    interviewLink: string;
+}
 
-const UserCard: React.FC<CardProps> = ({ avatarText, name, role, submittedDaysAgo, firebaseVideoUrl, feedbackLink }) => {
+const UserCard: React.FC<CardProps> = ({ avatarText, name, role, submittedDaysAgo, firebaseVideoUrl, feedbackLink, interviewLink }) => {
+    
     return (
         <div className="container grid gap-4 px-4 py-0 md:grid-cols-[1fr_00px] md:gap-8 lg:px-6">
             <div className="grid gap-4">
@@ -74,7 +77,7 @@ const UserCard: React.FC<CardProps> = ({ avatarText, name, role, submittedDaysAg
                                 </div>
                             </div>
                             <Button className="white-button" variant="outline">
-                                View Profile
+                                <Link href={interviewLink}>Open Interview Link</Link>
                             </Button>
                         </div>
                     </CardHeader>

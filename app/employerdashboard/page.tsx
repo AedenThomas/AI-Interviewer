@@ -137,6 +137,7 @@ export default function Employerdashboard() {
                 submittedDaysAgo={submittedDaysAgo}
                 firebaseVideoUrl={videoUrls[interview.uuid] ?? ''} // Use an empty string as the default value
                 feedbackLink={`/feedback/${interview.uuid}`}
+                interviewLink={`/${interview.uuid}`}
               />
             );
           })}
