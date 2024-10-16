@@ -100,26 +100,28 @@ export const Login = ({ isRegisterMode, setIsRegisterMode }: any) => {
                           Email
                         </label>
                         <input
-                          className=" w-full text-base px-4 py-2 border  border-gray-300 rounded-lg focus:outline-none focus:border-blue-400"
-                          type="email"
-                          placeholder="Email"
-                          value={email}
-                          autoComplete="off"
-                          onChange={(e) => setEmail(e.target.value)} />
+  className="w-full text-base px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-400 text-gray-900"
+  type="email"
+  placeholder="Email"
+  value={email}
+  autoComplete="off"
+  onChange={(e) => setEmail(e.target.value)}
+/>
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-700 tracking-wide">
                           Password
                         </label>
                         <input
-                          className=" w-full text-base px-4 py-2 border  border-gray-300 rounded-lg focus:outline-none focus:border-blue-400"
-                          type="password"
-                          placeholder="Password"
-                          value={password}
-                          autoComplete="off"
-                          onChange={(e) => setPassword(e.target.value)}
-                          // disabled={disablePhoneNumberChange}
-                          maxLength={10} />
+  className="w-full text-base px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-400 text-gray-900"
+  type="password"
+  placeholder="Password"
+  value={password}
+  autoComplete="off"
+  onChange={(e) => setPassword(e.target.value)}
+  maxLength={10}
+/>
+
                       </div>
 
                       <div className="mt-4">

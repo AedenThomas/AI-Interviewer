@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{}"
+self.__REACT_LOADABLE_MANIFEST='{"feedback/[uuid].tsx -> antd":{"id":33476,"files":["static/chunks/476.0356190f8a7a95ef.js"]}}';
