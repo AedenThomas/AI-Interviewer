@@ -17,7 +17,7 @@ const FeedbackPage = (): React.ReactNode => {
   }
 
   const genAI = new GoogleGenerativeAI(API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 
   const [progress, setProgress] = useState(0);

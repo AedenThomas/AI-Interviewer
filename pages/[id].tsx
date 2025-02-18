@@ -115,7 +115,7 @@ const speakText = async (text: string, recognizer: sdk.SpeechRecognizer, signal:
 
 
 const genAI = new GoogleGenerativeAI(API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 // const cohere = new CohereClient({ token: "", });
 
 const generationConfig = {
